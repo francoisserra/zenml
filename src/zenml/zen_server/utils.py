@@ -71,7 +71,7 @@ def initialize_zen_store() -> None:
 
     # We override track_analytics=False because we do not
     # want to track anything server side.
-    _zen_store.track_analytics = False
+    # _zen_store.track_analytics = False
 
     if _zen_store.type == StoreType.REST:
         raise ValueError(
@@ -177,6 +177,19 @@ def handle_exceptions(func: F) -> F:
 
     @wraps(func)
     def decorated(*args: Any, **kwargs: Any) -> Any:
+
+        from zenml.zen_server.auth import AuthContext, set_auth_context
+
+        for arg in args:
+            if isinstance(arg, AuthContext):
+                set_auth_context(arg)
+                break
+        else:
+            for _, arg in kwargs.items():
+                if isinstance(arg, AuthContext):
+                    set_auth_context(arg)
+                    break
+
         try:
             return func(*args, **kwargs)
         except NotAuthorizedError as error:

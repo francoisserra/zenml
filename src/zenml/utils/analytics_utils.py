@@ -361,6 +361,22 @@ class AnalyticsContext:
                         "database_type": str(server_info.database_type),
                     }
                 )
+            if zen_store.type != StoreType.REST:
+                try:
+                    from zenml.zen_server.auth import get_auth_context
+
+                    auth_context = get_auth_context()
+                    if auth_context is not None:
+                        properties.update(
+                            {
+                                "user_id": auth_context.user.id,
+                            }
+                        )
+                        logger.info(
+                            f"Analytics authenticated user: {auth_context.user.id}"
+                        )
+                except Exception as e:
+                    logger.warning(f"Could not get auth context: {e}")
 
         for k, v in properties.items():
             if isinstance(v, UUID):
