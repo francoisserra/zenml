@@ -12,9 +12,9 @@
 #  or implied. See the License for the specific language governing
 #  permissions and limitations under the License.
 
-from zenml.integrations.mlflow.steps import mlflow_model_deployer_step
-from zenml.integrations.mlflow.steps.mlflow_deployer import (
+from zenml.hub.mlflow.mlflow_deployer import (
     MLFlowDeployerParameters,
+    mlflow_model_deployer_step,
 )
 
 model_deployer = mlflow_model_deployer_step(
