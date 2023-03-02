@@ -148,4 +148,5 @@
 * [FAQ](reference/faq.md)
 * [CLI Cheat Sheet](reference/cheat-sheet.md)
 * [CLI Reference](https://apidocs.zenml.io/latest/cli/)
-* [API Reference](https://apidocs.zenml.io/latest/)
+* [Python SDK Reference](https://apidocs.zenml.io/latest/)
+* [API Reference](https://apidocs.zenml.io/latest/api/)
