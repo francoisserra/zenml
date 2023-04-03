@@ -39,6 +39,7 @@ from zenml.models.hub_plugin_models import (
     PluginStatus,
 )
 from zenml.utils.analytics_utils import AnalyticsEvent, event_handler
+from zenml.utils.git_utils import clone_git_repository
 
 logger = get_logger(__name__)
 
@@ -365,7 +366,9 @@ def clone_plugin(
         declare(f"Cloning plugin '{display_name}' to {output_dir}...")
         with tempfile.TemporaryDirectory() as tmp_dir:
             try:
-                _clone_repo(url=repo_url, to_path=tmp_dir, commit=commit)
+                clone_git_repository(
+                    url=repo_url, to_path=tmp_dir, commit=commit
+                )
             except RuntimeError:
                 error(
                     f"Could not find commit '{commit}' in repository "
@@ -377,46 +380,6 @@ def clone_plugin(
             plugin_dir = os.path.join(tmp_dir, subdir or "")
             shutil.move(plugin_dir, output_dir)
         declare(f"Successfully Cloned plugin '{display_name}'.")
-
-
-def _clone_repo(
-    url: str,
-    to_path: str,
-    branch: Optional[str] = None,
-    commit: Optional[str] = None,
-) -> None:
-    """Clone a repository and get the hash of the latest commit.
-
-    Args:
-        url: URL of the repository to clone.
-        to_path: Path to clone the repository to.
-        branch: Branch to clone. Defaults to "main".
-        commit: Commit to checkout. If specified, the branch argument is
-            ignored.
-
-    Raises:
-        RuntimeError: If the repository could not be cloned.
-    """
-    from git import GitCommandError
-    from git.repo import Repo
-
-    os.makedirs(os.path.basename(to_path), exist_ok=True)
-    try:
-        if commit:
-            repo = Repo.clone_from(
-                url=url,
-                to_path=to_path,
-                no_checkout=True,
-            )
-            repo.git.checkout(commit)
-        else:
-            repo = Repo.clone_from(
-                url=url,
-                to_path=to_path,
-                branch=branch or "main",
-            )
-    except GitCommandError as e:
-        raise RuntimeError from e
 
 
 @hub.command("login")
@@ -815,7 +778,7 @@ def _validate_repository(
         try:
             # Check if the URL/branch/commit are valid.
             with tempfile.TemporaryDirectory() as tmp_dir:
-                _clone_repo(
+                clone_git_repository(
                     url=url,
                     commit=commit,
                     branch=branch,
@@ -1037,13 +1000,14 @@ def batch_submit(config: str) -> None:
     declare(f"Submitting {len(config)} plugins to the hub...")
     if not isinstance(config, list):
         error("Config file must be a list of plugin definitions.")
-    for plugin in config:
+    for plugin_dict in config:
         try:
-            assert isinstance(plugin, dict)
-            plugin_request = HubPluginRequestModel(**plugin)
+            assert isinstance(plugin_dict, dict)
+            plugin_request = HubPluginRequestModel(**plugin_dict)
             plugin = client.create_plugin(plugin_request=plugin_request)
         except (AssertionError, ValidationError, HubAPIError) as e:
             warning(f"Could not submit plugin: {str(e)}")
+            continue
         display_name = plugin_display_name(
             name=plugin.name,
             version=plugin.version,
@@ -1087,14 +1051,7 @@ def get_logs(plugin_name: str) -> None:
         return
 
     for line in plugin.build_logs.splitlines():
-        if line.startswith("DEBUG"):
-            pass
-        if line.startswith("INFO"):
-            declare(line)
-        elif line.startswith("WARNING"):
-            warning(line)
-        else:
-            error(line)
+        declare(line)
 
 
 # GENERAL HELPER FUNCTIONS
