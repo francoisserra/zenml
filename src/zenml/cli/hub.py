@@ -70,7 +70,7 @@ def hub() -> None:
 def list_plugins(
     all: bool = False, mine: bool = False, installed: bool = False
 ) -> None:
-    """List all plugins available on the hub.
+    """List all plugins available on the ZenML Hub.
 
     Args:
         all: Whether to list all plugins, including ones that are not available.
@@ -122,7 +122,7 @@ def _format_plugins_table(
             status_icon = ":x:"
 
         display_name = plugin_display_name(
-            plugin_name=plugin.name,
+            name=plugin.name,
             version=plugin.version,
             author=plugin.author,
         )
@@ -164,7 +164,7 @@ def install_plugin(
     no_deps: bool = False,
     yes: bool = False,
 ) -> None:
-    """Install a plugin from the hub.
+    """Install a plugin from the ZenML Hub.
 
     Args:
         plugin_name: Name of the plugin.
@@ -274,7 +274,7 @@ def install_plugin(
 @hub.command("uninstall")
 @click.argument("plugin_name", type=str, required=True)
 def uninstall_plugin(plugin_name: str) -> None:
-    """Uninstall a hub plugin.
+    """Uninstall a ZenML Hub plugin.
 
     Args:
         plugin_name: Name of the plugin.
@@ -327,7 +327,7 @@ def clone_plugin(
     plugin_name: str,
     output_dir: Optional[str] = None,
 ) -> None:
-    """Clone a plugin from the hub.
+    """Clone the source code of a ZenML Hub plugin.
 
     Args:
         plugin_name: Name of the plugin.
@@ -995,10 +995,67 @@ def _ask_for_tags() -> List[str]:
             tags.append(tag)
 
 
+@hub.command("submit-batch")
+@click.argument(
+    "config", type=click.Path(exists=True, dir_okay=False), required=True
+)
+def batch_submit(config: str) -> None:
+    """Batch submit plugins to the ZenML Hub.
+
+    WARNING: This command is intended for advanced users only. It does not
+    perform any client-side validation which might lead to server-side HTTP
+    errors that are hard to debug if the config file you specify is invalid or
+    contains invalid plugin definitions. When in doubt, better use the `zenml
+    hub submit` command instead.
+
+    Args:
+        config: Path to the config file. The config file is expected to be a
+            list of plugin definitions. Each plugin definition must be a dict
+            with keys and values matching the fields of `HubPluginRequestModel`:
+            ```yaml
+            - name: str
+              version: str
+              release_notes: str
+              description: str
+              repository_url: str
+              repository_subdirectory: str
+              repository_branch: str
+              repository_commit: str
+              logo_url: str
+              tags:
+                - str
+                - ...
+            - ...
+            ```
+    """
+    from pydantic import ValidationError
+
+    from zenml.utils.yaml_utils import read_yaml
+
+    config = read_yaml(config)
+    client = HubClient()
+    declare(f"Submitting {len(config)} plugins to the hub...")
+    if not isinstance(config, list):
+        error("Config file must be a list of plugin definitions.")
+    for plugin in config:
+        try:
+            assert isinstance(plugin, dict)
+            plugin_request = HubPluginRequestModel(**plugin)
+            plugin = client.create_plugin(plugin_request=plugin_request)
+        except (AssertionError, ValidationError, HubAPIError) as e:
+            warning(f"Could not submit plugin: {str(e)}")
+        display_name = plugin_display_name(
+            name=plugin.name,
+            version=plugin.version,
+            author=plugin.author,
+        )
+        declare(f"Submitted plugin '{display_name}' to the hub.")
+
+
 @hub.command("logs")
 @click.argument("plugin_name", type=str, required=True)
 def get_logs(plugin_name: str) -> None:
-    """Get the build logs of a plugin.
+    """Get the build logs of a ZenML Hub plugin.
 
     Args:
         plugin_name: Name of the plugin.

@@ -1,0 +1,23 @@
+- name: mlflow_steps
+  # version: str
+  # release_notes: str
+  description: Steps for interacting with MLFlow model registries and deployers
+  repository_url: https://github.com/zenml-io/zenml-hub-plugins
+  repository_subdirectory: src/steps/mlflow
+  # repository_branch: str
+  # repository_commit: str
+  # logo_url: str
+  tags:
+    - zenml-type-step
+    - zenml-badge-official
+    - mlflow
+    - deployment
+- name: seldon_steps
+  description: Steps for interacting with Seldon model deployers
+  repository_url: https://github.com/zenml-io/zenml-hub-plugins
+  repository_subdirectory: src/steps/seldon
+  tags:
+    - zenml-type-step
+    - zenml-badge-official
+    - seldon
+    - deployment
