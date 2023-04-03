@@ -1,23 +1,20 @@
-- name: mlflow_steps
-  # version: str
-  # release_notes: str
-  description: Steps for interacting with MLFlow model registries and deployers
+- description: Steps for interacting with MLFlow model registries and deployers
+  logo_url: https://zenml.io/_next/image?url=https%3A%2F%2Fzenml-strapi-media.s3.eu-central-1.amazonaws.com%2Fmlflow_icon_ccdc92ac4b.svg&w=2048&q=75
+  name: mlflow_steps
+  repository_subdirectory: src/mlflow_steps
   repository_url: https://github.com/zenml-io/zenml-hub-plugins
-  repository_subdirectory: src/steps/mlflow
-  # repository_branch: str
-  # repository_commit: str
-  # logo_url: str
   tags:
-    - zenml-type-step
-    - zenml-badge-official
-    - mlflow
-    - deployment
-- name: seldon_steps
-  description: Steps for interacting with Seldon model deployers
+  - zenml-type-step
+  - zenml-badge-official
+  - mlflow
+  - deployment
+- description: Steps for interacting with Seldon model deployers
+  logo_url: https://zenml.io/_next/image?url=https%3A%2F%2Fzenml-strapi-media.s3.eu-central-1.amazonaws.com%2Fseldon_integration_470e9fa93f.png&w=2048&q=75
+  name: seldon_steps
+  repository_subdirectory: src/seldon_steps
   repository_url: https://github.com/zenml-io/zenml-hub-plugins
-  repository_subdirectory: src/steps/seldon
   tags:
-    - zenml-type-step
-    - zenml-badge-official
-    - seldon
-    - deployment
+  - zenml-type-step
+  - zenml-badge-official
+  - seldon
+  - deployment

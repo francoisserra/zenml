@@ -1,0 +1,31 @@
+- name: mlflow_steps
+  # content:
+  #   steps:
+  #     - <path.to.package.module.StepClass>
+  src: 
+    - src/zenml/integrations/mlflow/steps/mlflow_deployer.py
+    - src/zenml/integrations/mlflow/steps/mlflow_registry.py
+  requirements: 
+    - "mlflow>=1.24.0,<=2.2.2"
+    - "mlserver>=0.5.3"
+    - "mlserver-mlflow>=0.5.3"
+  logo: "https://zenml.io/_next/image?url=https%3A%2F%2Fzenml-strapi-media.s3.eu-central-1.amazonaws.com%2Fmlflow_icon_ccdc92ac4b.svg&w=2048&q=75"
+  # readme: <path/to/readme.md>
+  description: Steps for interacting with MLFlow model registries and deployers
+  tags:
+    - zenml-type-step
+    - zenml-badge-official
+    - mlflow
+    - deployment
+- name: seldon_steps
+  src:
+    - src/zenml/integrations/seldon/steps/seldon_deployer.py
+  requirements:
+    - "kubernetes==18.20.0"
+  logo: "https://zenml.io/_next/image?url=https%3A%2F%2Fzenml-strapi-media.s3.eu-central-1.amazonaws.com%2Fseldon_integration_470e9fa93f.png&w=2048&q=75"
+  description: Steps for interacting with Seldon model deployers
+  tags:
+    - zenml-type-step
+    - zenml-badge-official
+    - seldon
+    - deployment
