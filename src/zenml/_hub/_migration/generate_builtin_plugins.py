@@ -16,7 +16,7 @@ import logging
 import os
 from enum import Enum
 from importlib import import_module
-from typing import Any, Dict, List, Set
+from typing import List, Set
 
 from pydantic import BaseModel
 
@@ -110,7 +110,8 @@ def scan_entities(main_module) -> Set[str]:
                     issubclass(cls, EntityTypes.steps.value)
                     and cls != EntityTypes.steps.value
                 ):
-                    entities.add(f"{cls.__module__}.{cls.__name__}")
+                    # entities.add(f"{cls.__module__}.{cls.__name__}")
+                    entities.add(file_path)
     return entities
 
 
