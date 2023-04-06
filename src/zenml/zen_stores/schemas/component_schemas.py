@@ -46,7 +46,7 @@ class StackComponentSchema(ShareableSchema, table=True):
     __tablename__ = "stack_component"
 
     type: StackComponentType
-    auth_method: str
+    flavor: str
     configuration: bytes
 
     workspace_id: UUID = build_foreign_key_field(
