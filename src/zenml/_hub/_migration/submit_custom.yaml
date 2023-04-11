@@ -1,0 +1,15 @@
+- description: An example that shows how to use ZenML to build a GPT-based question answering pipeline.
+  logo_url: https://github.com/zenml-io/zenml-projects/blob/main/langchain-llamaindex-slackbot/assets/slackbot/slackbot-small.png
+  name: docs_qa_example
+  repository_subdirectory: src/docs_qa_example
+  repository_url: https://github.com/zenml-io/zenml-hub-plugins
+  tags:
+  - zenml-type-step
+  - zenml-type-pipeline
+  - zenml-type-example
+  - zenml-badge-official
+  - langchain
+  - llama-index
+  - question-answering
+  - example
+  
