@@ -134,7 +134,7 @@ def get_integration_plugins() -> List[Plugin]:
     plugins = []
     for integration in integration_dirs:
         integration_plugin = Plugin(
-            name=integration,
+            name=f"{integration}_steps",
             description=f'Steps using the ZenML integration "{integration}".',
         )
         try:
@@ -184,4 +184,4 @@ if __name__ == '__main__':
     plugins = scan_zenml_entities()
 
     # Write the results
-    write_yaml("plugins.yaml", [p.dict() for p in plugins])
+    write_yaml("migration_config.yaml", [p.dict() for p in plugins])
