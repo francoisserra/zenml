@@ -29,7 +29,7 @@ $ zenml service-connector list-types --type azure
 
 The Azure Service Connector is part of the Azure ZenML integration. You can either install the entire integration or use a pypi extra to install it independently of the integration:
 
-* `pip install zenml[connectors-azure]` installs only prerequisites for the Azure Service Connector Type
+* `pip install "zenml[connectors-azure]"` installs only prerequisites for the Azure Service Connector Type
 * `zenml integration install azure` installs the entire Azure ZenML integration
 
 It is not required to [install and set up the Azure CLI](https://learn.microsoft.com/en-us/cli/azure/authenticate-azure-cli) on your local machine to use the Azure Service Connector to link Stack Components to Azure resources and services. However, it is recommended to do so if you are looking for a quick setup that includes using the auto-configuration Service Connector features.
@@ -200,13 +200,97 @@ Service connector 'azure-implicit' of type 'azure' with id 'ad645002-0cd4-4d4f-a
 ```
 {% endcode %}
 
-#### Azure Service Principal
+</details>
+
+### Azure Service Principal
 
 Azure service principal credentials consists of an Azure client ID and client secret. These credentials are used to authenticate clients to Azure services.
 
 For this authentication method, the Azure Service Connector requires [an Azure service principal to be created](https://learn.microsoft.com/en-us/azure/developer/python/sdk/authentication-on-premises-apps?tabs=azure-portal) and a client secret to be generated.
 
-#### Azure Access Token
+<details>
+
+<summary>Example configuration</summary>
+
+The following assumes an Azure service principal was configured with a client secret and has permissions to access an Azure blob storage container, an AKS Kubernetes cluster and an ACR container registry. The service principal client ID, tenant ID and client secret are then used to configure the Azure Service Connector.
+
+```sh
+zenml service-connector register azure-service-principal --type azure --auth-method service-principal --tenant_id=a79f3633-8f45-4a74-a42e-68871c17b7fb --client_id=8926254a-8c3f-430a-a2fd-bdab234d491e --client_secret=AzureSuperSecret
+```
+
+{% code title="Example Command Output" %}
+```text
+⠙ Registering service connector 'azure-service-principal'...
+Successfully registered service connector `azure-service-principal` with access to the following resources:
+┏━━━━━━━━━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃     RESOURCE TYPE     │ RESOURCE NAMES                                ┃
+┠───────────────────────┼───────────────────────────────────────────────┨
+┃   🇦 azure-generic    │ ZenML Subscription                            ┃
+┠───────────────────────┼───────────────────────────────────────────────┨
+┃   📦 blob-container   │ az://demo-zenmlartifactstore                  ┃
+┠───────────────────────┼───────────────────────────────────────────────┨
+┃ 🌀 kubernetes-cluster │ demo-zenml-demos/demo-zenml-terraform-cluster ┃
+┠───────────────────────┼───────────────────────────────────────────────┨
+┃  🐳 docker-registry   │ demozenmlcontainerregistry.azurecr.io         ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+```
+{% endcode %}
+
+The Service Connector configuration shows that the connector is configured with service principal credentials:
+
+```sh
+zenml service-connector describe azure-service-principal
+```
+
+{% code title="Example Command Output" %}
+```text
+┏━━━━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ PROPERTY         │ VALUE                                                                          ┃
+┠──────────────────┼────────────────────────────────────────────────────────────────────────────────┨
+┃ ID               │ 273d2812-2643-4446-82e6-6098b8ccdaa4                                           ┃
+┠──────────────────┼────────────────────────────────────────────────────────────────────────────────┨
+┃ NAME             │ azure-service-principal                                                        ┃
+┠──────────────────┼────────────────────────────────────────────────────────────────────────────────┨
+┃ TYPE             │ 🇦  azure                                                                       ┃
+┠──────────────────┼────────────────────────────────────────────────────────────────────────────────┨
+┃ AUTH METHOD      │ service-principal                                                              ┃
+┠──────────────────┼────────────────────────────────────────────────────────────────────────────────┨
+┃ RESOURCE TYPES   │ 🇦  azure-generic, 📦 blob-container, 🌀 kubernetes-cluster, 🐳 docker-registry ┃
+┠──────────────────┼────────────────────────────────────────────────────────────────────────────────┨
+┃ RESOURCE NAME    │ <multiple>                                                                     ┃
+┠──────────────────┼────────────────────────────────────────────────────────────────────────────────┨
+┃ SECRET ID        │ 50d9f230-c4ea-400e-b2d7-6b52ba2a6f90                                           ┃
+┠──────────────────┼────────────────────────────────────────────────────────────────────────────────┨
+┃ SESSION DURATION │ N/A                                                                            ┃
+┠──────────────────┼────────────────────────────────────────────────────────────────────────────────┨
+┃ EXPIRES IN       │ N/A                                                                            ┃
+┠──────────────────┼────────────────────────────────────────────────────────────────────────────────┨
+┃ OWNER            │ default                                                                        ┃
+┠──────────────────┼────────────────────────────────────────────────────────────────────────────────┨
+┃ WORKSPACE        │ default                                                                        ┃
+┠──────────────────┼────────────────────────────────────────────────────────────────────────────────┨
+┃ SHARED           │ ➖                                                                             ┃
+┠──────────────────┼────────────────────────────────────────────────────────────────────────────────┨
+┃ CREATED_AT       │ 2023-06-20 19:16:26.802374                                                     ┃
+┠──────────────────┼────────────────────────────────────────────────────────────────────────────────┨
+┃ UPDATED_AT       │ 2023-06-20 19:16:26.802378                                                     ┃
+┗━━━━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+                     Configuration                      
+┏━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ PROPERTY      │ VALUE                                ┃
+┠───────────────┼──────────────────────────────────────┨
+┃ tenant_id     │ a79ff333-8f45-4a74-a42e-68871c17b7fb ┃
+┠───────────────┼──────────────────────────────────────┨
+┃ client_id     │ 8926254a-8c3f-430a-a2fd-bdab234d491e ┃
+┠───────────────┼──────────────────────────────────────┨
+┃ client_secret │ [HIDDEN]                             ┃
+┗━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+```
+{% endcode %}
+
+</details>
+
+### Azure Access Token
 
 Uses [temporary Azure access tokens](best-security-practices.md#short-lived-credentials) explicitly configured by the user or auto-configured from a local environment.
 
@@ -334,7 +418,11 @@ For an auto-configuration example, please refer to the [section about Azure acce
 
 ## Local client provisioning
 
-The local Kubernetes `kubectl` CLI and the Docker CLI can be [configured with credentials extracted from or generated by a compatible Azure Service Connector](service-connectors-guide.md#configure-local-clients).
+The local Azure CLI, Kubernetes `kubectl` CLI and the Docker CLI can be [configured with credentials extracted from or generated by a compatible Azure Service Connector](service-connectors-guide.md#configure-local-clients).
+
+{% hint style="info" %}
+Note that the Azure local CLI can only be configured with credentials issued by the Azure Service Connector if the connector is configured with the [service principal authentication method](azure-service-connector.md#azure-service-principal).
+{% endhint %}
 
 <details>
 
@@ -465,11 +553,22 @@ connectors: digest: sha256:a4cfb18a5cef5b2201759a42dd9fe8eb2f833b788e9d8a6ebde19
 ```
 {% endcode %}
 
+
+It is also possible to update the local Azure CLI configuration with credentials extracted from the Azure Service Connector:
+
+```sh
+zenml service-connector login azure-service-principal --resource-type azure-generic
+```
+
+{% code title="Example Command Output" %}
+```text
+Updated the local Azure CLI configuration with the connector's service principal credentials.
+The 'azure-service-principal' Azure Service Connector connector was used to successfully configure the local Generic Azure resource client/SDK.
+```
+{% endcode %}
+
 </details>
 
-{% hint style="info" %}
-This Service Connector does not support configuring the local Azure CLI with credentials stored in or generated from the connector configuration. If this feature is useful to you or your organization, please let us know by messaging us in [Slack](https://zenml.io/slack-invite) or [creating an issue on GitHub](https://github.com/zenml-io/zenml/issues).
-{% endhint %}
 
 ## Stack Components use
 

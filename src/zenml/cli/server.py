@@ -27,13 +27,14 @@ from zenml.analytics.enums import AnalyticsEvent
 from zenml.analytics.utils import track_handler
 from zenml.cli import utils as cli_utils
 from zenml.cli.cli import cli
+from zenml.cli.web_login import web_login
 from zenml.client import Client
 from zenml.config.global_config import GlobalConfiguration
 from zenml.console import console
 from zenml.enums import ServerProviderType, StoreType
 from zenml.exceptions import IllegalOperationError
 from zenml.logger import get_logger
-from zenml.utils import yaml_utils
+from zenml.utils import terraform_utils, yaml_utils
 from zenml.zen_server.utils import get_active_deployment
 
 logger = get_logger(__name__)
@@ -120,7 +121,22 @@ def up(
     """
     from zenml.zen_server.deploy.deployer import ServerDeployer
 
+    if connect:
+        logger.warning(
+            "The `--connect` flag is deprecated, has no effect, and will be "
+            "removed in a future release."
+        )
+
     gc = GlobalConfiguration()
+
+    # Raise an error if the client is already connected to a remote server.
+    if gc.store is not None and gc.store.type == StoreType.REST:
+        if not gc.zen_store.is_local_store():
+            cli_utils.error(
+                "Your ZenML client is already connected to a remote server. If "
+                "you want to spin up a local ZenML server, please disconnect "
+                "from the remote server first by running `zenml disconnect`."
+            )
 
     if docker:
         from zenml.utils.docker_utils import check_docker
@@ -175,46 +191,16 @@ def up(
     assert gc.store is not None
 
     if not blocking:
-        from zenml.zen_stores.base_zen_store import (
+        from zenml.constants import (
             DEFAULT_PASSWORD,
             DEFAULT_USERNAME,
         )
 
-        # Don't connect to the local server if the client is already
-        # connected to a remote server.
-        if (
-            gc.store is not None
-            and gc.store.type == StoreType.REST
-            and not connect
-        ):
-            try:
-                if gc.zen_store.is_local_store():
-                    connect = True
-                else:
-                    cli_utils.declare(
-                        "Skipped connecting to the local server. The "
-                        "client is already connected to a remote ZenML "
-                        "server. Pass the `--connect` flag to connect to "
-                        "the local server anyway."
-                    )
-            except Exception as e:
-                logger.debug(
-                    f"The current ZenML server configuration is no longer "
-                    f"valid. Connecting to the local server: {e}"
-                )
-                # even when connected to a remote ZenML server, if the
-                # connection is not working, we default to connecting to the
-                # local server
-                connect = True
-        else:
-            connect = True
-
-        if connect:
-            deployer.connect_to_server(
-                LOCAL_ZENML_SERVER_NAME,
-                DEFAULT_USERNAME,
-                DEFAULT_PASSWORD,
-            )
+        deployer.connect_to_server(
+            LOCAL_ZENML_SERVER_NAME,
+            DEFAULT_USERNAME,
+            DEFAULT_PASSWORD,
+        )
 
         if server.status and server.status.url:
             cli_utils.declare(
@@ -222,7 +208,11 @@ def up(
                 f"'{server.status.url}'. You can connect to it using the "
                 f"'{DEFAULT_USERNAME}' username and an empty password. "
             )
-            zenml.show(ngrok_token=ngrok_token)
+            zenml.show(
+                ngrok_token=ngrok_token,
+                username=DEFAULT_USERNAME,
+                password=DEFAULT_PASSWORD,
+            )
 
 
 @click.option(
@@ -253,15 +243,16 @@ def down() -> None:
 
     if not server:
         cli_utils.declare("The local ZenML dashboard is not running.")
-        return
-    from zenml.zen_server.deploy.deployer import ServerDeployer
 
-    deployer = ServerDeployer()
-    deployer.remove_server(server.config.name)
+    else:
+        from zenml.zen_server.deploy.deployer import ServerDeployer
 
-    GlobalConfiguration()
+        deployer = ServerDeployer()
+        deployer.remove_server(server.config.name)
+        cli_utils.declare("The local ZenML dashboard has been shut down.")
 
-    cli_utils.declare("The local ZenML dashboard has been shut down.")
+        gc = GlobalConfiguration()
+        gc.set_default_store()
 
 
 @cli.command("deploy", help="Deploy ZenML in the cloud.")
@@ -350,6 +341,11 @@ def deploy(
     with track_handler(
         event=AnalyticsEvent.ZENML_SERVER_DEPLOYED
     ) as analytics_handler:
+        try:
+            terraform_utils.verify_terraform_installation()
+        except RuntimeError as e:
+            cli_utils.error(str(e))
+
         config_dict: Dict[str, Any] = {}
 
         if config:
@@ -544,6 +540,10 @@ def status() -> None:
 
     Examples:
 
+      * to connect to a ZenML deployment using web login:
+
+        zenml connect --url=http://zenml.example.com:8080
+
       * to connect to a ZenML deployment using command line arguments:
 
         zenml connect --url=http://zenml.example.com:8080 --username=admin
@@ -601,7 +601,8 @@ def status() -> None:
 )
 @click.option(
     "--username",
-    help="The username that is used to authenticate with a ZenML server.",
+    help="The username that is used to authenticate with a ZenML server. If "
+    "omitted, the web login will be used.",
     required=False,
     type=str,
 )
@@ -609,6 +610,13 @@ def status() -> None:
     "--password",
     help="The password that is used to authenticate with a ZenML server. If "
     "omitted, a prompt will be shown to enter the password.",
+    required=False,
+    type=str,
+)
+@click.option(
+    "--api-key",
+    help="Use an API key to authenticate with a ZenML server. If "
+    "omitted, the web login will be used.",
     required=False,
     type=str,
 )
@@ -648,6 +656,7 @@ def connect(
     url: Optional[str] = None,
     username: Optional[str] = None,
     password: Optional[str] = None,
+    api_key: Optional[str] = None,
     workspace: Optional[str] = None,
     no_verify_ssl: bool = False,
     ssl_ca_cert: Optional[str] = None,
@@ -662,6 +671,8 @@ def connect(
             server.
         password: The password that is used to authenticate with the ZenML
             server.
+        api_key: The API key that is used to authenticate with the ZenML
+            server.
         workspace: The active workspace that is used to connect to the ZenML
             server.
         no_verify_ssl: Whether to verify the server's TLS certificate.
@@ -674,8 +685,25 @@ def connect(
     from zenml.config.store_config import StoreConfiguration
     from zenml.zen_stores.base_zen_store import BaseZenStore
 
+    # Raise an error if a local server is running when trying to connect to
+    # another server
+    active_deployment = get_active_deployment(local=True)
+    if (
+        active_deployment
+        and active_deployment.status
+        and active_deployment.status.url != url
+    ):
+        cli_utils.error(
+            "You're trying to connect to a remote ZenML server but already "
+            "have a local server running. This can lead to unexpected "
+            "behavior. Please shut down the local server by running "
+            "`zenml down` before connecting to a remote server."
+        )
+
     store_dict: Dict[str, Any] = {}
-    verify_ssl = ssl_ca_cert if ssl_ca_cert is not None else not no_verify_ssl
+    verify_ssl: Union[str, bool] = (
+        ssl_ca_cert if ssl_ca_cert is not None else not no_verify_ssl
+    )
 
     if config:
         if os.path.isfile(config):
@@ -696,6 +724,7 @@ def connect(
         url = store_dict.get("url", url)
         username = username or store_dict.get("username")
         password = password or store_dict.get("password")
+        api_key = api_key or store_dict.get("api_key")
         verify_ssl = store_dict.get("verify_ssl", verify_ssl)
 
     elif url is None:
@@ -723,20 +752,28 @@ def connect(
     assert url is not None
 
     store_dict["url"] = url
-    if not username:
-        username = click.prompt("Username", type=str)
-    store_dict["username"] = username
-    if password is None:
-        password = click.prompt(
-            f"Password for user {username} (press ENTER for empty password)",
-            default="",
-            hide_input=True,
-        )
-    store_dict["password"] = password
-
     store_type = BaseZenStore.get_store_type(url)
     if store_type == StoreType.REST:
         store_dict["verify_ssl"] = verify_ssl
+
+    if not username and not api_key:
+        if store_type == StoreType.REST:
+            store_dict["api_token"] = web_login(url=url, verify_ssl=verify_ssl)
+        else:
+            username = click.prompt("Username", type=str)
+
+    if username:
+        store_dict["username"] = username
+
+        if password is None:
+            password = click.prompt(
+                f"Password for user {username} (press ENTER for empty password)",
+                default="",
+                hide_input=True,
+            )
+        store_dict["password"] = password
+    elif api_key:
+        store_dict["api_key"] = api_key
 
     store_config_class = BaseZenStore.get_store_config_class(store_type)
     assert store_config_class is not None
@@ -744,12 +781,10 @@ def connect(
     store_config = store_config_class.parse_obj(store_dict)
     try:
         GlobalConfiguration().set_store(store_config)
-    except IllegalOperationError as e:
+    except IllegalOperationError:
         cli_utils.warning(
             f"User '{username}' does not have sufficient permissions to "
-            f"to access the server at '{url}'. Please ask the server "
-            f"administrator to assign a role with permissions to your "
-            f"username: {str(e)}"
+            f"access the server at '{url}'."
         )
 
     if workspace:

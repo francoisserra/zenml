@@ -57,7 +57,7 @@ def list_integrations() -> None:
     warning(
         "\n" + "To install the dependencies of a specific integration, type: "
     )
-    warning("zenml integration install EXAMPLE_NAME")
+    warning("zenml integration install INTEGRATION_NAME")
 
 
 @integration.command(
@@ -89,7 +89,7 @@ def get_requirements(integration_name: Optional[str] = None) -> None:
                 "\n" + "To install the dependencies of a "
                 "specific integration, type: "
             )
-            warning("zenml integration install EXAMPLE_NAME")
+            warning("zenml integration install INTEGRATION_NAME")
 
 
 @integration.command(
@@ -264,15 +264,6 @@ def install(
     ):
         with console.status("Installing integrations..."):
             install_packages(requirements)
-            if "label_studio" in integrations:
-                warning(
-                    "There is a known issue with Label Studio installations "
-                    "via zenml. You might find that the Label Studio "
-                    "installation breaks the ZenML CLI. In this case, "
-                    "please run `pip install 'pydantic<1.11,>=1.9.0'` to "
-                    "fix the issue or message us on Slack if you need help "
-                    "with this. We are working on a more definitive fix."
-                )
 
 
 @integration.command(
@@ -397,12 +388,3 @@ def upgrade(
     ):
         with console.status("Upgrading integrations..."):
             install_packages(requirements, upgrade=True)
-            if "label_studio" in integrations:
-                warning(
-                    "There is a known issue with Label Studio installations "
-                    "via zenml. You might find that the Label Studio "
-                    "installation breaks the ZenML CLI. In this case, please "
-                    "run `pip install 'pydantic<1.11,>=1.9.0'` to fix the "
-                    "issue or message us on Slack if you need help with this. "
-                    "We are working on a more definitive fix."
-                )

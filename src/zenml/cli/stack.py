@@ -15,7 +15,7 @@
 import getpass
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 from uuid import UUID
 
 import click
@@ -35,22 +35,23 @@ from zenml.cli.utils import (
     print_model_url,
     print_page_info,
     print_stacks_table,
+    verify_mlstacks_prerequisites_installation,
 )
 from zenml.client import Client
 from zenml.console import console
 from zenml.constants import (
     ALPHA_MESSAGE,
+    MLSTACKS_SUPPORTED_STACK_COMPONENTS,
     STACK_RECIPE_MODULAR_RECIPES,
 )
 from zenml.enums import CliCategories, StackComponentType
 from zenml.exceptions import (
     IllegalOperationError,
     ProvisioningError,
-    StackExistsError,
 )
 from zenml.io.fileio import rmtree
 from zenml.logger import get_logger
-from zenml.models import StackFilterModel
+from zenml.models import StackFilter
 from zenml.utils.dashboard_utils import get_stack_url
 from zenml.utils.io_utils import create_dir_recursive_if_not_exists
 from zenml.utils.mlstacks_utils import (
@@ -63,6 +64,9 @@ from zenml.utils.mlstacks_utils import (
     verify_spec_and_tf_files_exist,
 )
 from zenml.utils.yaml_utils import read_yaml, write_yaml
+
+if TYPE_CHECKING:
+    from zenml.models import StackResponse
 
 logger = get_logger(__name__)
 
@@ -111,14 +115,6 @@ def stack() -> None:
     "--model_registry",
     "model_registry",
     help="Name of the model registry for this stack.",
-    type=str,
-    required=False,
-)
-@click.option(
-    "-x",
-    "--secrets_manager",
-    "secrets_manager",
-    help="Name of the secrets manager for this stack.",
     type=str,
     required=False,
 )
@@ -193,20 +189,12 @@ def stack() -> None:
     help="Immediately set this stack as active.",
     type=click.BOOL,
 )
-@click.option(
-    "--share",
-    "share",
-    is_flag=True,
-    help="Use this flag to share this stack with other users.",
-    type=click.BOOL,
-)
 def register_stack(
     stack_name: str,
     artifact_store: str,
     orchestrator: str,
     container_registry: Optional[str] = None,
     model_registry: Optional[str] = None,
-    secrets_manager: Optional[str] = None,
     step_operator: Optional[str] = None,
     feature_store: Optional[str] = None,
     model_deployer: Optional[str] = None,
@@ -216,7 +204,6 @@ def register_stack(
     data_validator: Optional[str] = None,
     image_builder: Optional[str] = None,
     set_stack: bool = False,
-    share: bool = False,
 ) -> None:
     """Register a stack.
 
@@ -226,7 +213,6 @@ def register_stack(
         orchestrator: Name of the orchestrator for this stack.
         container_registry: Name of the container registry for this stack.
         model_registry: Name of the model registry for this stack.
-        secrets_manager: Name of the secrets manager for this stack.
         step_operator: Name of the step operator for this stack.
         feature_store: Name of the feature store for this stack.
         model_deployer: Name of the model deployer for this stack.
@@ -236,7 +222,6 @@ def register_stack(
         data_validator: Name of the data validator for this stack.
         image_builder: Name of the new image builder for this stack.
         set_stack: Immediately set this stack as active.
-        share: Share the stack with other users.
     """
     with console.status(f"Registering stack '{stack_name}'...\n"):
         client = Client()
@@ -260,8 +245,6 @@ def register_stack(
             components[StackComponentType.MODEL_DEPLOYER] = model_deployer
         if model_registry:
             components[StackComponentType.MODEL_REGISTRY] = model_registry
-        if secrets_manager:
-            components[StackComponentType.SECRETS_MANAGER] = secrets_manager
         if step_operator:
             components[StackComponentType.STEP_OPERATOR] = step_operator
         if experiment_tracker:
@@ -273,15 +256,10 @@ def register_stack(
                 StackComponentType.CONTAINER_REGISTRY
             ] = container_registry
 
-        # click<8.0.0 gives flags a default of None
-        if share is None:
-            share = False
-
         try:
             created_stack = client.create_stack(
                 name=stack_name,
                 components=components,
-                is_shared=share,
             )
         except (KeyError, IllegalOperationError) as err:
             cli_utils.error(str(err))
@@ -348,14 +326,6 @@ def register_stack(
     required=False,
 )
 @click.option(
-    "-x",
-    "--secrets_manager",
-    "secrets_manager",
-    help="Name of the new secrets manager for this stack.",
-    type=str,
-    required=False,
-)
-@click.option(
     "-f",
     "--feature_store",
     "feature_store",
@@ -417,7 +387,6 @@ def update_stack(
     orchestrator: Optional[str] = None,
     container_registry: Optional[str] = None,
     step_operator: Optional[str] = None,
-    secrets_manager: Optional[str] = None,
     feature_store: Optional[str] = None,
     model_deployer: Optional[str] = None,
     experiment_tracker: Optional[str] = None,
@@ -435,7 +404,6 @@ def update_stack(
         orchestrator: Name of the new orchestrator for this stack.
         container_registry: Name of the new container registry for this stack.
         step_operator: Name of the new step operator for this stack.
-        secrets_manager: Name of the new secrets manager for this stack.
         feature_store: Name of the new feature store for this stack.
         model_deployer: Name of the new model deployer for this stack.
         experiment_tracker: Name of the new experiment tracker for this
@@ -476,8 +444,6 @@ def update_stack(
             updates[StackComponentType.MODEL_DEPLOYER] = [model_deployer]
         if orchestrator:
             updates[StackComponentType.ORCHESTRATOR] = [orchestrator]
-        if secrets_manager:
-            updates[StackComponentType.SECRETS_MANAGER] = [secrets_manager]
         if step_operator:
             updates[StackComponentType.STEP_OPERATOR] = [step_operator]
 
@@ -494,52 +460,6 @@ def update_stack(
             f"Stack `{updated_stack.name}` successfully updated!"
         )
     print_model_url(get_stack_url(updated_stack))
-
-
-@stack.command(
-    "share",
-    context_settings=dict(ignore_unknown_options=True),
-    help="Share a stack and all its components.",
-)
-@click.argument("stack_name_or_id", type=str, required=False)
-@click.option(
-    "--recursive",
-    "-r",
-    "recursive",
-    is_flag=True,
-    help="Recursively also share all stack components if they are private.",
-)
-def share_stack(
-    stack_name_or_id: Optional[str], recursive: bool = False
-) -> None:
-    """Share a stack with your team.
-
-    Args:
-        stack_name_or_id: Name or id of the stack to share.
-        recursive: Recursively also share all components
-    """
-    client = Client()
-
-    with console.status("Sharing the stack...\n"):
-        try:
-            if recursive:
-                stack_to_update = client.get_stack(
-                    name_id_or_prefix=stack_name_or_id
-                )
-                for c_type, components in stack_to_update.components.items():
-                    for component in components:
-                        client.update_stack_component(
-                            name_id_or_prefix=component.id,
-                            component_type=c_type,
-                            is_shared=True,
-                        )
-            updated_stack = client.update_stack(
-                name_id_or_prefix=stack_name_or_id,
-                is_shared=True,
-            )
-        except (KeyError, IllegalOperationError, StackExistsError) as err:
-            cli_utils.error(str(err))
-        cli_utils.declare(f"Stack `{updated_stack.name}` successfully shared!")
 
 
 @stack.command(
@@ -569,14 +489,6 @@ def share_stack(
     "--model_registry",
     "model_registry_flag",
     help="Include this to remove the the model registry from this stack.",
-    is_flag=True,
-    required=False,
-)
-@click.option(
-    "-x",
-    "--secrets_manager",
-    "secrets_manager_flag",
-    help="Include this to remove the secrets manager from this stack.",
     is_flag=True,
     required=False,
 )
@@ -640,7 +552,6 @@ def remove_stack_component(
     stack_name_or_id: Optional[str] = None,
     container_registry_flag: Optional[bool] = False,
     step_operator_flag: Optional[bool] = False,
-    secrets_manager_flag: Optional[bool] = False,
     feature_store_flag: Optional[bool] = False,
     model_deployer_flag: Optional[bool] = False,
     experiment_tracker_flag: Optional[bool] = False,
@@ -657,7 +568,6 @@ def remove_stack_component(
         container_registry_flag: To remove the container registry from this
             stack.
         step_operator_flag: To remove the step operator from this stack.
-        secrets_manager_flag: To remove the secrets manager from this stack.
         feature_store_flag: To remove the feature store from this stack.
         model_deployer_flag: To remove the model deployer from this stack.
         experiment_tracker_flag: To remove the experiment tracker from this
@@ -678,9 +588,6 @@ def remove_stack_component(
 
         if step_operator_flag:
             stack_component_update[StackComponentType.STEP_OPERATOR] = []
-
-        if secrets_manager_flag:
-            stack_component_update[StackComponentType.SECRETS_MANAGER] = []
 
         if feature_store_flag:
             stack_component_update[StackComponentType.FEATURE_STORE] = []
@@ -750,7 +657,7 @@ def rename_stack(
 
 
 @stack.command("list")
-@list_options(StackFilterModel)
+@list_options(StackFilter)
 @click.pass_context
 def list_stacks(ctx: click.Context, **kwargs: Any) -> None:
     """List all stacks that fulfill the filter requirements.
@@ -782,17 +689,29 @@ def list_stacks(ctx: click.Context, **kwargs: Any) -> None:
     type=click.STRING,
     required=False,
 )
-def describe_stack(stack_name_or_id: Optional[str] = None) -> None:
+@click.option(
+    "--outputs",
+    "-o",
+    is_flag=True,
+    default=False,
+    help="Include the outputs from mlstacks deployments.",
+)
+def describe_stack(
+    stack_name_or_id: Optional[str] = None, outputs: bool = False
+) -> None:
     """Show details about a named stack or the active stack.
 
     Args:
         stack_name_or_id: Name of the stack to describe.
+        outputs: Include the outputs from mlstacks deployments.
     """
     client = Client()
 
     with console.status("Describing the stack...\n"):
         try:
-            stack_ = client.get_stack(name_id_or_prefix=stack_name_or_id)
+            stack_: "StackResponse" = client.get_stack(
+                name_id_or_prefix=stack_name_or_id
+            )
         except KeyError as err:
             cli_utils.error(str(err))
 
@@ -800,6 +719,8 @@ def describe_stack(stack_name_or_id: Optional[str] = None) -> None:
             stack=stack_,
             active=stack_.id == client.active_stack_model.id,
         )
+        if outputs:
+            cli_utils.print_stack_outputs(stack_)
 
     print_model_url(get_stack_url(stack_))
 
@@ -1114,7 +1035,7 @@ def import_stack(
         component_ids[component_type] = component_id
 
     imported_stack = Client().create_stack(
-        name=stack_name, components=component_ids, is_shared=False
+        name=stack_name, components=component_ids
     )
 
     print_model_url(get_stack_url(imported_stack))
@@ -1123,22 +1044,12 @@ def import_stack(
 @stack.command("copy", help="Copy a stack to a new stack name.")
 @click.argument("source_stack_name_or_id", type=str, required=True)
 @click.argument("target_stack", type=str, required=True)
-@click.option(
-    "--share",
-    "share",
-    is_flag=True,
-    help="Use this flag to share this stack with other users.",
-    type=click.BOOL,
-)
-def copy_stack(
-    source_stack_name_or_id: str, target_stack: str, share: bool = False
-) -> None:
+def copy_stack(source_stack_name_or_id: str, target_stack: str) -> None:
     """Copy a stack.
 
     Args:
         source_stack_name_or_id: The name or id of the stack to copy.
         target_stack: Name of the copied stack.
-        share: Share the stack with other users.
     """
     client = Client()
 
@@ -1159,7 +1070,6 @@ def copy_stack(
         copied_stack = client.create_stack(
             name=target_stack,
             components=component_mapping,
-            is_shared=share,
         )
 
     print_model_url(get_stack_url(copied_stack))
@@ -1204,19 +1114,12 @@ def register_secrets(
         return
 
     secret_names = {s.name for s in required_secrets}
-    secrets_manager = stack_.secrets_manager
-    if not secrets_manager:
-        cli_utils.error(
-            f"Unable to register required secrets ({secret_names}) because "
-            "the stack doesn't contain a secrets manager. Please add a secrets "
-            "manager to your stack and then rerun this command."
-        )
 
     secrets_to_register = []
     secrets_to_update = []
     for name in secret_names:
         try:
-            secret_content = secrets_manager.get_secret(name).content.copy()
+            secret_content = client.get_secret(name).secret_values.copy()
             secret_exists = True
         except KeyError:
             secret_content = {}
@@ -1258,23 +1161,128 @@ def register_secrets(
 
             secret_content[key] = value
 
-        from zenml.secret import ArbitrarySecretSchema
-
-        secret = ArbitrarySecretSchema(name=name, **secret_content)
-
         if not secret_exists:
-            secrets_to_register.append(secret)
+            secrets_to_register.append(
+                (
+                    name,
+                    secret_content,
+                )
+            )
         elif needs_update:
-            secrets_to_update.append(secret)
+            secrets_to_update.append(
+                (
+                    name,
+                    secret_content,
+                )
+            )
 
-    for secret in secrets_to_register:
-        cli_utils.declare(f"Registering secret `{secret.name}`:")
-        cli_utils.pretty_print_secret(secret=secret, hide_secret=True)
-        secrets_manager.register_secret(secret)
-    for secret in secrets_to_update:
-        cli_utils.declare(f"Updating secret `{secret.name}`:")
-        cli_utils.pretty_print_secret(secret=secret, hide_secret=True)
-        secrets_manager.update_secret(secret)
+    for secret_name, secret_values in secrets_to_register:
+        cli_utils.declare(f"Registering secret `{secret_name}`:")
+        cli_utils.pretty_print_secret(secret_values, hide_secret=True)
+        client.create_secret(secret_name, values=secret_values)
+    for secret_name, secret_values in secrets_to_update:
+        cli_utils.declare(f"Updating secret `{secret_name}`:")
+        cli_utils.pretty_print_secret(secret_values, hide_secret=True)
+        client.update_secret(secret_name, add_or_update_values=secret_values)
+
+
+def _get_deployment_params_interactively(
+    click_params: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Get deployment values from command line arguments.
+
+    Args:
+        click_params: Required and pre-existing values.
+
+    Returns:
+        Full deployment arguments.
+    """
+    deployment_values = {
+        "provider": click_params["provider"],
+        "stack_name": click_params["stack_name"],
+        "region": click_params["region"],
+    }
+    for component_type in MLSTACKS_SUPPORTED_STACK_COMPONENTS:
+        verify_mlstacks_prerequisites_installation()
+        from mlstacks.constants import ALLOWED_FLAVORS
+
+        if (
+            click.prompt(
+                f"Enable {component_type}?",
+                type=click.Choice(["y", "n"]),
+                default="n",
+            )
+            == "y"
+        ):
+            component_flavor = click.prompt(
+                f"  Enter {component_type} flavor",
+                type=click.Choice(ALLOWED_FLAVORS[component_type]),
+            )
+            deployment_values[component_type] = component_flavor
+
+    if (
+        click.prompt(
+            "Deploy using debug_mode?",
+            type=click.Choice(["y", "n"]),
+            default="n",
+        )
+        == "y"
+    ):
+        deployment_values["debug_mode"] = True
+
+    extra_config = []
+    # use click.prompt to populate extra_config until someone just hits enter
+    while True:
+        declare(
+            "\nAdd to extra_config for stack deployment -->\n",
+            bold=True,
+        )
+        key = click.prompt(
+            "Enter `extra_config` key or hit enter to skip",
+            type=str,
+            default="",
+        )
+        if key == "":
+            break
+        value = click.prompt(
+            f"Enter value for '{key}'",
+            type=str,
+        )
+        extra_config.append(f"{key}={value}")
+
+    # get mandatory GCP project_id if provider is GCP
+    # skip if project_id already specified in extra_config
+    if click_params["provider"] == "gcp" and not any(
+        s.startswith("project_id=") for s in extra_config
+    ):
+        project_id = click.prompt("What is your GCP project_id?", type=str)
+        extra_config.append(f"project_id={project_id}")
+        declare(f"Project ID '{project_id}' added to extra_config.")
+
+    deployment_values["extra_config"] = extra_config
+
+    tags = []
+    # use click.prompt to populate tags until someone just hits enter
+    while True:
+        declare(
+            "\nAdd to tags for stack deployment -->\n",
+            bold=True,
+        )
+        tag = click.prompt(
+            "Enter `tags` key or hit enter to skip",
+            type=str,
+            default="",
+        )
+        if tag == "":
+            break
+        value = click.prompt(
+            f"Enter value for '{tag}'",
+            type=str,
+        )
+        tags.append(f"{tag}={value}")
+    deployment_values["tags"] = tags
+
+    return deployment_values
 
 
 @stack.command(help="Deploy a stack using mlstacks.")
@@ -1340,7 +1348,14 @@ def register_secrets(
     "-o",
     required=False,
     type=click.Choice(
-        ["kubernetes", "kubeflow", "tekton", "sagemaker", "vertex"]
+        [
+            "kubernetes",
+            "kubeflow",
+            "tekton",
+            "sagemaker",
+            "skypilot",
+            "vertex",
+        ]
     ),
     help="The flavor of orchestrator to use. "
     "If not specified, the default orchestrator will be used.",
@@ -1401,6 +1416,14 @@ def register_secrets(
     help="Pass one or more tags.",
     multiple=True,
 )
+@click.option(
+    "--interactive",
+    "-i",
+    "interactive",
+    is_flag=True,
+    default=False,
+    help="Deploy the stack interactively.",
+)
 @click.pass_context
 def deploy(
     ctx: click.Context,
@@ -1419,6 +1442,7 @@ def deploy(
     debug_mode: bool = False,
     tags: Optional[List[str]] = None,
     extra_config: Optional[List[str]] = None,
+    interactive: bool = False,
 ) -> None:
     """Deploy a stack with mlstacks.
 
@@ -1449,6 +1473,7 @@ def deploy(
             deployment.
         mlops_platform: The flavor of MLOps platform to use.
         region: The region to deploy the stack to.
+        interactive: Deploy the stack interactively.
     """
     with track_handler(
         event=AnalyticsEvent.DEPLOY_STACK,
@@ -1470,6 +1495,8 @@ def deploy(
 
         if not file:
             cli_params: Dict[str, Any] = ctx.params
+            if interactive:
+                cli_params = _get_deployment_params_interactively(cli_params)
             stack, components = convert_click_params_to_mlstacks_primitives(
                 cli_params
             )
@@ -1636,3 +1663,66 @@ def destroy(
                 f"Spec directory for stack '{stack_name}' successfully deleted."
             )
         cli_utils.declare(f"Stack '{stack_name}' successfully destroyed.")
+
+
+@stack.command(
+    "connect",
+    help="Connect a service-connector to a stack's components. "
+    "Note that this only connects the service-connector to the current "
+    "components of the stack and not to the stack itself, which means that "
+    "you need to rerun the command after adding new components to the stack.",
+)
+@click.argument("stack_name_or_id", type=str, required=False)
+@click.option(
+    "--connector",
+    "-c",
+    "connector",
+    help="The name, ID or prefix of the connector to use.",
+    required=False,
+    type=str,
+)
+@click.option(
+    "--interactive",
+    "-i",
+    "interactive",
+    is_flag=True,
+    default=False,
+    help="Configure a service connector resource interactively.",
+    type=click.BOOL,
+)
+@click.option(
+    "--no-verify",
+    "no_verify",
+    is_flag=True,
+    default=False,
+    help="Skip verification of the connector resource.",
+    type=click.BOOL,
+)
+def connect_stack(
+    stack_name_or_id: Optional[str] = None,
+    connector: Optional[str] = None,
+    interactive: bool = False,
+    no_verify: bool = False,
+) -> None:
+    """Connect a service-connector to all components of a stack.
+
+    Args:
+        stack_name_or_id: Name of the stack to connect.
+        connector: The name, ID or prefix of the connector to use.
+        interactive: Configure a service connector resource interactively.
+        no_verify: Skip verification of the connector resource.
+    """
+    from zenml.cli.stack_components import (
+        connect_stack_component_with_service_connector,
+    )
+
+    client = Client()
+    stack_to_connect = client.get_stack(name_id_or_prefix=stack_name_or_id)
+    for component in stack_to_connect.components.values():
+        connect_stack_component_with_service_connector(
+            component_type=component[0].type,
+            name_id_or_prefix=component[0].name,
+            connector=connector,
+            interactive=interactive,
+            no_verify=no_verify,
+        )

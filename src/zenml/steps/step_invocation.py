@@ -15,11 +15,11 @@
 from typing import TYPE_CHECKING, Any, Dict, Set
 
 if TYPE_CHECKING:
+    from zenml.artifacts.external_artifact import ExternalArtifact
     from zenml.config.step_configurations import StepConfiguration
     from zenml.new.pipelines.pipeline import Pipeline
     from zenml.steps import BaseStep
     from zenml.steps.entrypoint_function_utils import StepArtifact
-    from zenml.steps.external_artifact import ExternalArtifact
 
 
 class StepInvocation:
@@ -32,6 +32,7 @@ class StepInvocation:
         input_artifacts: Dict[str, "StepArtifact"],
         external_artifacts: Dict[str, "ExternalArtifact"],
         parameters: Dict[str, Any],
+        default_parameters: Dict[str, Any],
         upstream_steps: Set[str],
         pipeline: "Pipeline",
     ) -> None:
@@ -43,6 +44,7 @@ class StepInvocation:
             input_artifacts: The input artifacts for the invocation.
             external_artifacts: The external artifacts for the invocation.
             parameters: The parameters for the invocation.
+            default_parameters: The default parameters for the invocation.
             upstream_steps: The upstream steps for the invocation.
             pipeline: The parent pipeline of the invocation.
         """
@@ -51,6 +53,7 @@ class StepInvocation:
         self.input_artifacts = input_artifacts
         self.external_artifacts = external_artifacts
         self.parameters = parameters
+        self.default_parameters = default_parameters
         self.invocation_upstream_steps = upstream_steps
         self.pipeline = pipeline
 
@@ -107,7 +110,7 @@ class StepInvocation:
     def finalize(self, parameters_to_ignore: Set[str]) -> "StepConfiguration":
         """Finalizes a step invocation.
 
-        The will validate the upstream steps and run final configurations on the
+        It will validate the upstream steps and run final configurations on the
         step that is represented by the invocation.
 
         Args:
@@ -117,6 +120,10 @@ class StepInvocation:
         Returns:
             The finalized step configuration.
         """
+        from zenml.artifacts.external_artifact_config import (
+            ExternalArtifactConfiguration,
+        )
+
         # Validate the upstream steps for legacy .after() calls
         self._get_and_validate_step_upstream_steps()
 
@@ -125,13 +132,23 @@ class StepInvocation:
             for key, value in self.parameters.items()
             if key not in parameters_to_ignore
         }
+        parameters_to_apply.update(
+            {
+                key: value
+                for key, value in self.default_parameters.items()
+                if key not in parameters_to_ignore
+                and key not in parameters_to_apply
+            }
+        )
         self.step.configure(parameters=parameters_to_apply)
 
-        external_artifact_ids = {}
+        external_artifacts: Dict[str, ExternalArtifactConfiguration] = {}
         for key, artifact in self.external_artifacts.items():
-            external_artifact_ids[key] = artifact.upload_if_necessary()
+            if artifact.value is not None:
+                artifact.upload_by_value()
+            external_artifacts[key] = artifact.config
 
         return self.step._finalize_configuration(
             input_artifacts=self.input_artifacts,
-            external_artifacts=external_artifact_ids,
+            external_artifacts=external_artifacts,
         )

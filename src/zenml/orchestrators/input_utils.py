@@ -13,21 +13,23 @@
 #  permissions and limitations under the License.
 """Utilities for inputs."""
 
+import functools
 from typing import TYPE_CHECKING, Dict, List, Tuple
 from uuid import UUID
 
 from zenml.client import Client
 from zenml.config.step_configurations import Step
 from zenml.exceptions import InputResolutionError
-from zenml.models import StepRunFilterModel
+from zenml.utils import pagination_utils
 
 if TYPE_CHECKING:
-    from zenml.models.artifact_models import ArtifactResponseModel
+    from zenml.models import ArtifactVersionResponse
 
 
 def resolve_step_inputs(
-    step: "Step", run_id: UUID
-) -> Tuple[Dict[str, "ArtifactResponseModel"], List[UUID]]:
+    step: "Step",
+    run_id: UUID,
+) -> Tuple[Dict[str, "ArtifactVersionResponse"], List[UUID]]:
     """Resolves inputs for the current step.
 
     Args:
@@ -39,17 +41,19 @@ def resolve_step_inputs(
             step or output.
 
     Returns:
-        The IDs of the input artifacts and the IDs of parent steps of the
-        current step.
+        The IDs of the input artifact versions and the IDs of parent steps of
+            the current step.
     """
+    list_run_steps = functools.partial(
+        Client().list_run_steps, pipeline_run_id=run_id
+    )
+
     current_run_steps = {
         run_step.name: run_step
-        for run_step in Client()
-        .zen_store.list_run_steps(StepRunFilterModel(pipeline_run_id=run_id))
-        .items
+        for run_step in pagination_utils.depaginate(list_run_steps)
     }
 
-    input_artifacts: Dict[str, "ArtifactResponseModel"] = {}
+    input_artifacts: Dict[str, "ArtifactVersionResponse"] = {}
     for name, input_ in step.spec.inputs.items():
         try:
             step_run = current_run_steps[input_.step_name]
@@ -68,8 +72,14 @@ def resolve_step_inputs(
 
         input_artifacts[name] = artifact
 
-    for name, artifact_id in step.config.external_input_artifacts.items():
-        input_artifacts[name] = Client().get_artifact(artifact_id=artifact_id)
+    for (
+        name,
+        external_artifact,
+    ) in step.config.external_input_artifacts.items():
+        artifact_version_id = external_artifact.get_artifact_version_id()
+        input_artifacts[name] = Client().get_artifact_version(
+            artifact_version_id
+        )
 
     parent_step_ids = [
         current_run_steps[upstream_step].id

@@ -24,6 +24,7 @@ from typing import (
     Tuple,
 )
 
+from zenml import __version__
 from zenml.config.base_settings import BaseSettings, ConfigurationLevel
 from zenml.config.pipeline_run_configuration import PipelineRunConfiguration
 from zenml.config.pipeline_spec import PipelineSpec
@@ -36,7 +37,7 @@ from zenml.config.step_configurations import (
 )
 from zenml.environment import get_run_environment_dict
 from zenml.exceptions import StackValidationError
-from zenml.models.pipeline_deployment_models import PipelineDeploymentBaseModel
+from zenml.models import PipelineDeploymentBase
 from zenml.utils import pydantic_utils, settings_utils
 
 if TYPE_CHECKING:
@@ -50,6 +51,20 @@ from zenml.logger import get_logger
 logger = get_logger(__file__)
 
 
+def get_zenml_versions() -> Tuple[str, str]:
+    """Returns the version of ZenML on the client and server side.
+
+    Returns:
+        the ZenML versions on the client and server side respectively.
+    """
+    from zenml.client import Client
+
+    client = Client()
+    server_version = client.zen_store.get_store_info().version
+
+    return __version__, server_version
+
+
 class Compiler:
     """Compiles ZenML pipelines to serializable representations."""
 
@@ -58,7 +73,7 @@ class Compiler:
         pipeline: "Pipeline",
         stack: "Stack",
         run_configuration: PipelineRunConfiguration,
-    ) -> Tuple[PipelineDeploymentBaseModel, PipelineSpec]:
+    ) -> Tuple[PipelineDeploymentBase, PipelineSpec]:
         """Compiles a ZenML pipeline to a serializable representation.
 
         Args:
@@ -85,7 +100,8 @@ class Compiler:
             configuration_level=ConfigurationLevel.PIPELINE,
             stack=stack,
         )
-        pipeline.configure(settings=pipeline_settings, merge=False)
+        with pipeline.__suppress_configure_warnings__():
+            pipeline.configure(settings=pipeline_settings, merge=False)
 
         settings_to_passdown = {
             key: settings
@@ -114,11 +130,15 @@ class Compiler:
             pipeline_name=pipeline.name
         )
 
-        deployment = PipelineDeploymentBaseModel(
+        client_version, server_version = get_zenml_versions()
+
+        deployment = PipelineDeploymentBase(
             run_name_template=run_name,
             pipeline_configuration=pipeline.configuration,
             step_configurations=steps,
             client_environment=get_run_environment_dict(),
+            client_version=client_version,
+            server_version=server_version,
         )
 
         step_specs = [step.spec for step in steps.values()]
@@ -176,18 +196,23 @@ class Compiler:
             KeyError: If the run configuration contains options for a
                 non-existent step.
         """
-        pipeline.configure(
-            enable_cache=config.enable_cache,
-            enable_artifact_metadata=config.enable_artifact_metadata,
-            enable_artifact_visualization=config.enable_artifact_visualization,
-            enable_step_logs=config.enable_step_logs,
-            settings=config.settings,
-            extra=config.extra,
-        )
+        with pipeline.__suppress_configure_warnings__():
+            pipeline.configure(
+                enable_cache=config.enable_cache,
+                enable_artifact_metadata=config.enable_artifact_metadata,
+                enable_artifact_visualization=config.enable_artifact_visualization,
+                enable_step_logs=config.enable_step_logs,
+                settings=config.settings,
+                extra=config.extra,
+                model_version=config.model_version,
+                parameters=config.parameters,
+            )
 
         for invocation_id in config.steps:
             if invocation_id not in pipeline.invocations:
-                raise KeyError(f"No step invocation with id {invocation_id}.")
+                raise KeyError(
+                    f"Configuration for step {invocation_id} cannot be applied to any pipeline step. Make sure that all configured steps are present in your pipeline."
+                )
 
         # Override `enable_cache` of all steps if set at run level
         if config.enable_cache is not None:
@@ -243,7 +268,8 @@ class Compiler:
             else:
                 pipeline_settings[settings_key] = default_settings
 
-        pipeline.configure(settings=pipeline_settings, merge=False)
+        with pipeline.__suppress_configure_warnings__():
+            pipeline.configure(settings=pipeline_settings, merge=False)
 
     def _get_default_settings(
         self,
@@ -409,7 +435,9 @@ class Compiler:
 
         step = invocation.step
         if step_config:
-            step._apply_configuration(step_config)
+            step._apply_configuration(
+                step_config, runtime_parameters=invocation.parameters
+            )
 
         step_spec = self._get_step_spec(invocation=invocation)
         step_settings = self._filter_and_validate_settings(

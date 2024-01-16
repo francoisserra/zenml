@@ -30,6 +30,7 @@
 """Implementation of the VertexAI orchestrator."""
 
 import os
+import re
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Type, cast
 from uuid import UUID
 
@@ -83,10 +84,7 @@ from zenml.utils.io_utils import get_global_config_directory
 
 if TYPE_CHECKING:
     from zenml.config.base_settings import BaseSettings
-    from zenml.config.schedule import Schedule
-    from zenml.models.pipeline_deployment_models import (
-        PipelineDeploymentResponseModel,
-    )
+    from zenml.models import PipelineDeploymentResponse, ScheduleResponse
     from zenml.stack import Stack
     from zenml.steps import ResourceSettings
 
@@ -103,7 +101,14 @@ def _clean_pipeline_name(pipeline_name: str) -> str:
     Returns:
         Cleaned pipeline name.
     """
-    return pipeline_name.replace("_", "-").lower()
+    pipeline_name = pipeline_name.lower()
+
+    # This pattern matches anything that is not a lowercase letter,
+    #  a number, or a dash
+    pattern = r"[^a-z0-9-]"
+
+    # Replace any characters matching the pattern with a dash
+    return re.sub(pattern, "-", pipeline_name)
 
 
 class VertexOrchestrator(ContainerizedOrchestrator, GoogleCredentialsMixin):
@@ -229,7 +234,7 @@ class VertexOrchestrator(ContainerizedOrchestrator, GoogleCredentialsMixin):
 
     def prepare_pipeline_deployment(
         self,
-        deployment: "PipelineDeploymentResponseModel",
+        deployment: "PipelineDeploymentResponse",
         stack: "Stack",
     ) -> None:
         """Build a Docker image and push it to the container registry.
@@ -310,7 +315,7 @@ class VertexOrchestrator(ContainerizedOrchestrator, GoogleCredentialsMixin):
 
     def prepare_or_run_pipeline(
         self,
-        deployment: "PipelineDeploymentResponseModel",
+        deployment: "PipelineDeploymentResponse",
         stack: "Stack",
         environment: Dict[str, str],
     ) -> Any:
@@ -504,7 +509,7 @@ class VertexOrchestrator(ContainerizedOrchestrator, GoogleCredentialsMixin):
         pipeline_name: str,
         run_name: str,
         stack: "Stack",
-        schedule: "Schedule",
+        schedule: "ScheduleResponse",
         pipeline_file_path: str,
         settings: VertexOrchestratorSettings,
     ) -> None:

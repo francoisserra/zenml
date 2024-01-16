@@ -62,11 +62,41 @@ def my_pipeline(...):
 Note, that **step-level** defined hooks take **precedence** over **pipeline-level** defined hooks.
 {% endhint %}
 
+<details>
+
+<summary>See it in action with the E2E example</summary>
+
+_To setup the local environment used below, follow the recommendations from the_ [_Project templates_](../best-practices/using-project-templates.md#advanced-guide)_._
+
+In [`steps/alerts/notify_on.py`](../../../../../examples/e2e/steps/alerts/notify\_on.py), you will find a step to notify the user about success and a function used to notify the user about step failure using the [Alerter](../../../stacks-and-components/component-guide/alerters/alerters.md) from the active stack.
+
+We use `@step` for success notification to only notify the user about a fully successful pipeline run and not about every successful step.
+
+In [`pipelines/training.py`](../../../../../examples/e2e/pipelines/training.py), you can find the usage of a notification step and a function. We will attach a `notify_on_failure` function directly to the pipeline definition like this:
+
+```python
+@pipeline(
+    ...
+    on_failure=notify_on_failure,
+    ...
+)
+```
+
+At the very end of the training pipeline, we will execute the `notify_on_success` step, but only after all other steps have finished - we control it with `after` statement as follows:
+
+```python
+...
+    last_step_name = "promote_metric_compare_promoter"
+
+    notify_on_success(after=[last_step_name])
+...
+```
+
+</details>
+
 ## Accessing step information inside a hook
 
-Similar as for regular ZenML steps, you can use the 
-[StepContext](fetch-metadata-within-steps.md) to access information about the 
-current pipeline run or step inside your hook function:
+Similar as for regular ZenML steps, you can use the [StepContext](fetch-metadata-within-steps.md) to access information about the current pipeline run or step inside your hook function:
 
 ```python
 from zenml import step, get_step_context
@@ -83,6 +113,47 @@ def on_failure(exception: BaseException):
 def my_step(some_parameter: int = 1)
     raise ValueError("My exception")
 ```
+
+<details>
+
+<summary>See it in action with the E2E example</summary>
+
+_To setup the local environment used below, follow the recommendations from the_ [_Project templates_](../best-practices/using-project-templates.md#advanced-guide)_._
+
+In [`steps/alerts/notify_on.py`](../../../../../examples/e2e/steps/alerts/notify\_on.py), you will find a step to notify the user about success and a function used to notify the user about step failure using the [Alerter](../../../stacks-and-components/component-guide/alerters/alerters.md) from the active stack.
+
+We use `@step` for success notification to only notify the user about a fully successful pipeline run and not about every successful step.
+
+Inside the helper function `build_message()`, you will find an example on how developers can work with [StepContext](fetch-metadata-within-steps.md) to form a proper notification:
+
+```python
+def build_message(status: str) -> str:
+    """Builds a message to post.
+
+    Args:
+        status: Status to be set in text.
+
+    Returns:
+        str: Prepared message.
+    """
+    step_context = get_step_context()
+    run_url = get_run_url(step_context.pipeline_run)
+
+    return (
+        f"Pipeline `{step_context.pipeline.name}` [{str(step_context.pipeline.id)}] {status}!\n"
+        f"Run `{step_context.pipeline_run.name}` [{str(step_context.pipeline_run.id)}]\n"
+        f"URL: {run_url}"
+    )
+
+@step(enable_cache=False)
+def notify_on_success() -> None:
+    """Notifies user on pipeline success."""
+    step_context = get_step_context()
+    if alerter and step_context.pipeline_run.config.extra["notify_on_success"]:
+        alerter.post(message=build_message(status="succeeded"))
+```
+
+</details>
 
 ## Linking to the `Alerter` Stack component
 
@@ -107,6 +178,51 @@ from zenml.hooks import alerter_success_hook, alerter_failure_hook
 def my_step(...):
     ...
 ```
+
+<details>
+
+<summary>See it in action with the E2E example</summary>
+
+_To setup the local environment used below, follow the recommendations from the_ [_Project templates_](../best-practices/using-project-templates.md#advanced-guide)_._
+
+In [`steps/alerts/notify_on.py`](../../../../../examples/e2e/steps/alerts/notify\_on.py), you will find a step to notify the user about success and a function used to notify the user about step failure using the [Alerter](../../../stacks-and-components/component-guide/alerters/alerters.md) from the active stack.
+
+We use `@step` for success notification to only notify the user about a fully successful pipeline run and not about every successful step.
+
+Inside this code file, you can find how developers can work with Al component to send notification messages across configured channels:
+
+```python
+from zenml.client import Client
+
+alerter = Client().active_stack.alerter
+
+def notify_on_failure() -> None:
+    """Notifies user on step failure. Used in Hook."""
+    step_context = get_step_context()
+    if alerter and step_context.pipeline_run.config.extra["notify_on_failure"]:
+        alerter.post(message=build_message(status="failed"))
+```
+
+If the Al component is not present in Stack we suppress notification, but you can also dump it to the log as Error using:
+
+```python
+from zenml.client import Client
+from zenml.logger import get_logger
+
+logger = get_logger(__name__)
+alerter = Client().active_stack.alerter
+
+def notify_on_failure() -> None:
+    """Notifies user on step failure. Used in Hook."""
+    step_context = get_step_context()
+    if step_context.pipeline_run.config.extra["notify_on_failure"]:
+        if alerter:
+            alerter.post(message=build_message(status="failed"))
+        else:
+            logger.error(message=build_message(status="failed"))
+```
+
+</details>
 
 ## Using the OpenAI ChatGPT failure hook
 
@@ -136,9 +252,8 @@ def my_step(...):
 
 If you had set up a Slack alerter as your alerter, for example, then you would see a message like this:
 
-![OpenAI ChatGPT Failure Hook](/docs/book/.gitbook/assets/failure_alerter.png)
+![OpenAI ChatGPT Failure Hook](../../../.gitbook/assets/failure\_alerter.png)
 
 You can use the suggestions as input that can help you fix whatever is going wrong in your code. If you have GPT-4 enabled for your account, you can use the `openai_gpt4_alerter_failure_hook` hook instead (imported from the same module).
 
-<!-- For scarf -->
-<figure><img alt="ZenML Scarf" referrerpolicy="no-referrer-when-downgrade" src="https://static.scarf.sh/a.png?x-pxid=f0b4f458-0a54-4fcd-aa95-d5ee424815bc" /></figure>
+<figure><img src="https://static.scarf.sh/a.png?x-pxid=f0b4f458-0a54-4fcd-aa95-d5ee424815bc" alt="ZenML Scarf"><figcaption></figcaption></figure>

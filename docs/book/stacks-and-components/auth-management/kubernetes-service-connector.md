@@ -10,7 +10,7 @@ The ZenML Kubernetes service connector facilitates authenticating and connecting
 
 The Kubernetes Service Connector is part of the Kubernetes ZenML integration. You can either install the entire integration or use a pypi extra to install it independently of the integration:
 
-* `pip install zenml[connectors-kubernetes]` installs only prerequisites for the Kubernetes Service Connector Type
+* `pip install "zenml[connectors-kubernetes]"` installs only prerequisites for the Kubernetes Service Connector Type
 * `zenml integration install kubernetes` installs the entire Kubernetes ZenML integration
 
 A local Kubernetes CLI (i.e. `kubectl` ) and setting up local `kubectl` configuration contexts is not required to access Kubernetes clusters in your Stack Components through the Kubernetes Service Connector.
@@ -37,6 +37,8 @@ Two authentication methods are supported:
 
 1. username and password. This is not recommended for production purposes.
 2. authentication token with or without client certificates.
+
+For Kubernetes clusters that use neither username and password nor authentication tokens, such as local K3D clusters, the authentication token method can be used with an empty token. 
 
 {% hint style="warning" %}
 This Service Connector does not support generating short-lived credentials from the credentials configured in the Service Connector. In effect, this means that the configured credentials will be distributed directly to clients and used to authenticate to the target Kubernetes API. It is recommended therefore to use API tokens accompanied by client certificates if possible.

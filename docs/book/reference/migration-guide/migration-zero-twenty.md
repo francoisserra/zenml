@@ -279,13 +279,13 @@ The `zenml profile migrate` CLI command also provides command line flags for cas
 
 Stack components can now be registered without having the required integrations installed. As part of this change, we split all existing stack component definitions into three classes: an implementation class that defines the logic of the stack component, a config class that defines the attributes and performs input validations, and a flavor class that links implementation and config classes together. See [**component flavor models #895**](https://github.com/zenml-io/zenml/pull/895) for more details.
 
-If you are only using stack component flavors that are shipped with the zenml Python distribution, this change has no impact on the configuration of your existing stacks. However, if you are currently using custom stack component implementations, you will need to update them to the new format. See the [documentation on writing custom stack component flavors](../../user-guide/advanced-guide/custom-stack-solutions/implement-a-custom-stack-component.md) for updated information on how to do this.
+If you are only using stack component flavors that are shipped with the zenml Python distribution, this change has no impact on the configuration of your existing stacks. However, if you are currently using custom stack component implementations, you will need to update them to the new format. See the [documentation on writing custom stack component flavors](../../stacks-and-components/custom-solutions/implement-a-custom-stack-component.md) for updated information on how to do this.
 
 ## Shared ZenML Stacks and Stack Components
 
 With collaboration being the key part of ZenML, the 0.20.0 release puts the concepts of Users in the front and center and introduces the possibility to share stacks and stack components with other users by means of the ZenML server.
 
-When your client is connected to a ZenML server, entities such as Stacks, Stack Components, Stack Component Flavors, Pipelines, Pipeline Runs, and Artifacts are scoped to a Project and owned by the User that creates them. Only the objects that are owned by the current user used to authenticate to the ZenML server and that are part of the current project are available to the client.
+When your client is connected to a ZenML server, entities such as Stacks, Stack Components, Stack Component Flavors, Pipelines, Pipeline Runs, and artifacts are scoped to a Project and owned by the User that creates them. Only the objects that are owned by the current user used to authenticate to the ZenML server and that are part of the current project are available to the client.
 
 Stacks and Stack Components can also be shared within the same project with other users. To share an object, either set it as shared during creation time (e.g. `zenml stack register mystack ... --share`) or afterwards (e.g. through `zenml stack share mystack`).
 

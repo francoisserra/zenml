@@ -31,6 +31,21 @@ To answer this question, here are some pros and cons in comparison to [the stack
 {% endtab %}
 {% endtabs %}
 
+## Installing the mlstacks extra
+
+To install `mlstacks`, either run `pip install mlstacks` or `pip install
+"zenml[mlstacks]"` to install it along with ZenML.
+
+MLStacks uses Terraform on the backend to manage infrastructure. You will need
+to have Terraform installed. Please visit [the Terraform
+docs](https://learn.hashicorp.com/tutorials/terraform/install-cli#install-terraform)
+for installation instructions.
+
+MLStacks also uses Helm to deploy Kubernetes resources. You will need to have
+Helm installed. Please visit [the Helm
+docs](https://helm.sh/docs/intro/install/#from-script) for installation
+instructions.
+
 ## Deploying a stack
 
 A simple stack deployment can be done using the following command:
@@ -89,6 +104,30 @@ Any extra configuration for specific components (as noted [in the individual
 component deployment documentation](deploy-a-stack-component.md)) can be passed
 in with the `-x` option. This option can be used multiple times to pass in
 multiple configurations.
+
+### Interactive stack deployment
+
+If you would like to be guided through the deployment process, you can use the
+`zenml stack deploy` command with the `--interactive` flag. You will still need
+to provide the `provider`, `name` and `region` options as described above but
+for the rest, you will get prompts in the CLI as to which components you would
+like to deploy. For example, using GCP as the provider you might type:
+
+```bash
+zenml stack deploy -p gcp -n my_new_stack -r us-east1 --interactive
+```
+
+## Displaying Terraform outputs for stacks deployed with mlstacks
+
+If you want to view any of the Terraform-generated outputs for a stack deployed
+with `mlstacks`, you can do so with the following command:
+
+```bash
+zenml stack describe -o <STACK_NAME>
+```
+
+This will print any available outputs to the console if you have deployed a
+stack with `mlstacks` via ZenML.
 
 ## Deleting / destroying resources
 

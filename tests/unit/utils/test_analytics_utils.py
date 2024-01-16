@@ -67,14 +67,10 @@ def event_check(
     assert properties["client_id"] == str(gc.user_id)
 
     if event == AnalyticsEvent.REGISTERED_STACK:
-        assert "workspace_id" in properties
-        assert properties["workspace_id"] == str(client.active_workspace.id)
-
         assert "entity_id" in properties
 
         assert StackComponentType.ARTIFACT_STORE in properties
         assert StackComponentType.ORCHESTRATOR in properties
-        assert "is_shared" in properties
 
     if event == AnalyticsEvent.REGISTERED_STACK_COMPONENT:
         assert "type" in properties
@@ -82,7 +78,6 @@ def event_check(
 
         assert "flavor" in properties
         assert "entity_id" in properties
-        assert "is_shared" in properties
 
     if event == AnalyticsEvent.RUN_PIPELINE:
         assert "store_type" in properties
@@ -170,7 +165,7 @@ def test_analytics_event(
         name="new_artifact_store",
         flavor="local",
         component_type=StackComponentType.ARTIFACT_STORE,
-        configuration={"path": "/tmp/path/for/test"},
+        configuration={"path": "/tmp/path/for/test"},  # nosec
     )
     clean_client.create_stack(
         name="new_stack",
